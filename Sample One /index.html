@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SpineGuard UI</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      padding: 30px;
+      text-align: center;
+    }
+
+    h1 {
+      color: #2c3e50;
+    }
+
+    .status {
+      font-size: 24px;
+      margin-top: 20px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+
+    canvas {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 90%;
+    }
+
+    th, td {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+    }
+
+    th {
+      background: #eee;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🧠 SpineGuard Posture Monitor</h1>
+
+  <p><strong>Current Pitch:</strong> <span id="pitch">--</span>°</p>
+  <p><strong>Current Roll:</strong> <span id="roll">--</span>°</p>
+  <p><strong>Posture Status:</strong> <span class="status" id="postureStatus">Loading...</span></p>
+
+  <button onclick="setBaseline()">📌 Set Current as Good Posture</button>
+
+  <h2>📈 Live Chart</h2>
+  <canvas id="liveChart"></canvas>
+
+  <h2>📋 History (Last 50 Entries)</h2>
+  <table id="historyTable">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Pitch</th>
+        <th>Roll</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <canvas id="historyChart"></canvas>
+
+  <script>
+    // Firebase Config (Replace only if your config is different)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ",
+      authDomain: "first-trail-f286d.firebaseapp.com",
+      databaseURL: "https://first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "first-trail-f286d",
+      storageBucket: "first-trail-f286d.appspot.com",
+      messagingSenderId: "199953923693",
+      appId: "1:199953923693:web:537040c6ba62db7ff68964"
+    };
+
+    const USER_EMAIL = "testuser@gmail.com";
+    const USER_PASSWORD = "123@gmaiok";
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let livePitch = [];
+    let liveRoll = [];
+    let liveLabels = [];
+
+    let liveChart, historyChart;
+
+    // Authenticate
+    firebase.auth().signInWithEmailAndPassword(USER_EMAIL, USER_PASSWORD)
+      .then(() => {
+        console.log("Signed in");
+        listenLiveData();
+        listenHistory();
+      })
+      .catch(err => {
+        alert("Login failed: " + err.message);
+      });
+
+    function listenLiveData() {
+      db.ref("posture/current").on("value", snapshot => {
+        const data = snapshot.val();
+        if (!data) return;
+        document.getElementById("pitch").innerText = data.pitch.toFixed(1);
+        document.getElementById("roll").innerText = data.roll.toFixed(1);
+        updateStatus(data);
+        updateLiveChart(data.pitch, data.roll);
+      });
+    }
+
+    function updateStatus(data) {
+      const statusEl = document.getElementById("postureStatus");
+      if (data.status === "good") {
+        statusEl.innerText = "✅ Good Posture";
+        statusEl.style.color = "green";
+      } else if (data.status === "moderate") {
+        statusEl.innerText = "⚠️ Moderate Posture";
+        statusEl.style.color = "orange";
+      } else {
+        statusEl.innerText = "🚫 Bad Posture";
+        statusEl.style.color = "red";
+      }
+    }
+
+    function setBaseline() {
+      db.ref("posture/current").once("value").then(snapshot => {
+        db.ref("posture/baseline").set(snapshot.val());
+        alert("Baseline posture set!");
+      });
+    }
+
+    function updateLiveChart(pitch, roll) {
+      const now = new Date().toLocaleTimeString();
+      if (livePitch.length > 20) {
+        livePitch.shift();
+        liveRoll.shift();
+        liveLabels.shift();
+      }
+      livePitch.push(pitch);
+      liveRoll.push(roll);
+      liveLabels.push(now);
+
+      if (!liveChart) {
+        const ctx = document.getElementById("liveChart").getContext("2d");
+        liveChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: liveLabels,
+            datasets: [
+              {
+                label: "Pitch",
+                data: livePitch,
+                borderColor: "blue",
+                fill: false
+              },
+              {
+                label: "Roll",
+                data: liveRoll,
+                borderColor: "red",
+                fill: false
+              }
+            ]
+          },
+          options: {
+            scales: {
+              y: {
+                suggestedMin: -90,
+                suggestedMax: 90
+              }
+            }
+          }
+        });
+      } else {
+        liveChart.data.labels = liveLabels;
+        liveChart.data.datasets[0].data = livePitch;
+        liveChart.data.datasets[1].data = liveRoll;
+        liveChart.update();
+      }
+    }
+
+    function listenHistory() {
+      db.ref("posture/history").limitToLast(50).on("value", snapshot => {
+        const table = document.querySelector("#historyTable tbody");
+        table.innerHTML = "";
+
+        const labels = [];
+        const pitchData = [];
+        const rollData = [];
+
+        snapshot.forEach(child => {
+          const entry = child.val();
+          const time = new Date(entry.timestamp).toLocaleTimeString();
+          labels.push(time);
+          pitchData.push(entry.pitch);
+          rollData.push(entry.roll);
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${time}</td>
+            <td>${entry.pitch?.toFixed(1) ?? "--"}</td>
+            <td>${entry.roll?.toFixed(1) ?? "--"}</td>
+            <td>${entry.status}</td>
+          `;
+          table.appendChild(row);
+        });
+
+        drawHistoryChart(labels, pitchData, rollData);
+      });
+    }
+
+    function drawHistoryChart(labels, pitchData, rollData) {
+      const ctx = document.getElementById("historyChart").getContext("2d");
+      if (historyChart) {
+        historyChart.destroy();
+      }
+
+      historyChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Pitch (History)",
+              data: pitchData,
+              borderColor: "blue",
+              fill: false
+            },
+            {
+              label: "Roll (History)",
+              data: rollData,
+              borderColor: "orange",
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: { title: { display: true, text: "Time" } },
+            y: { title: { display: true, text: "Angle (°)" }, min: -90, max: 90 }
+          }
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>
