@@ -4,12 +4,12 @@
 // #include <Firebase_ESP_Client.h>
 
 // // WiFi credentials
-// const char* ssid = "TP-Link_AFE8";
-// const char* password = "24784026";
+// const char* ssid = "";
+// const char* password = "";
 
 // // Firebase project credentials
-// #define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
-// #define DATABASE_URL "first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app/"
+// #define API_KEY ""
+// #define DATABASE_URL ""
 
 // // Firebase objects
 // FirebaseData fbdo;
@@ -86,14 +86,14 @@
 // #include <addons/RTDBHelper.h>
 
 // // WiFi credentials
-// const char* ssid = "TP-Link_AFE8";
-// const char* password = "24784026";
+// const char* ssid = "";
+// const char* password = "";
 
 // // Firebase project credentials
-// #define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
-// #define DATABASE_URL "first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app"
-// #define USER_EMAIL "testuser@gmail.com" // Replace with your Firebase registered email
-// #define USER_PASSWORD "123@gmaiok"       // Replace with your Firebase registered password
+// #define API_KEY ""
+// #define DATABASE_URL ""
+// #define USER_EMAIL "" // Replace with your Firebase registered email
+// #define USER_PASSWORD ""       // Replace with your Firebase registered password
 
 // // Firebase objects
 // FirebaseData fbdo;
@@ -293,14 +293,14 @@
 // #include <addons/TokenHelper.h>
 
 // // WiFi credentials
-// const char* ssid = "TP-Link_AFE8";
-// const char* password = "24784026";
+// const char* ssid = "";
+// const char* password = "";
 
 // // Firebase project credentials
-// #define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
-// #define DATABASE_URL "first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app"
-// #define USER_EMAIL "testuser@gmail.com"
-// #define USER_PASSWORD "123@gmaiok"
+// #define API_KEY ""
+// #define DATABASE_URL ""
+// #define USER_EMAIL ""
+// #define USER_PASSWORD ""
 
 // // Firebase objects
 // FirebaseData fbdo;
@@ -429,14 +429,14 @@
 #include <addons/TokenHelper.h>
 
 // WiFi credentials
-const char* ssid = "TP-Link_AFE8";
-const char* password = "24784026";
+const char* ssid = "";
+const char* password = "";
 
 // Firebase project credentials
-#define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
-#define DATABASE_URL "first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define USER_EMAIL "testuser@gmail.com"
-#define USER_PASSWORD "123@gmaiok"
+#define API_KEY ""
+#define DATABASE_URL ""
+#define USER_EMAIL ""
+#define USER_PASSWORD ""
 
 // Firebase objects
 FirebaseData fbdo;
