@@ -1,561 +1,686 @@
+
+// #include <Arduino.h>
+// #include <Adafruit_MPU6050.h>
+// #include <Adafruit_Sensor.h>
 // #include <Wire.h>
-// #include <MPU6050_light.h>
 // #include <ESP8266WiFi.h>
 // #include <Firebase_ESP_Client.h>
+// #include <addons/RTDBHelper.h>
+// #include <addons/TokenHelper.h>
 
 // // WiFi credentials
-// const char* ssid = "";
-// const char* password = "";
+// const char* ssid = "vivo Y27";
+// const char* password = "mkmkmkmk";
 
-// // Firebase project credentials
-// #define API_KEY ""
-// #define DATABASE_URL ""
+// // Firebase config
+// #define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
+// #define DATABASE_URL "https://first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app/"
+// #define USER_EMAIL "pieceone2u@gmail.com"
+// #define USER_PASSWORD "12345@2310"
 
-// // Firebase objects
+// // Posture classification thresholds
+// const float GOOD_PITCH_MAX = 10.0;
+// const float MODERATE_PITCH_MAX = 20.0;
+// const float GOOD_ROLL_MAX = 5.0;
+// const float MODERATE_ROLL_MAX = 10.0;
+
+// // Firebase and MPU objects
 // FirebaseData fbdo;
-// FirebaseConfig config;
 // FirebaseAuth auth;
+// FirebaseConfig config;
+// Adafruit_MPU6050 mpu;
 
-// MPU6050 mpu(Wire);
-// unsigned long timer = 0;
+// // Session control
+// bool sessionActive = false;
+// unsigned long sessionStartTime = 0;
+// unsigned long lastLogTime = 0;
+// const unsigned long SESSION_DURATION = 60UL * 1000UL; // 1 min
+// const unsigned long LOG_INTERVAL = 3UL * 1000UL; // 3 sec
+// String currentSessionPath = "";
+// String userFeedback = "";
 
 // void setup() {
 //   Serial.begin(115200);
-//   Wire.begin();
+//   delay(1000);
 
-//   // WiFi connect
+//   // Connect to WiFi
 //   WiFi.begin(ssid, password);
 //   Serial.print("Connecting to WiFi");
 //   while (WiFi.status() != WL_CONNECTED) {
-//     delay(500);
-//     Serial.print(".");
+//     delay(500); Serial.print(".");
 //   }
-//   Serial.println("\nWiFi connected.");
+//   Serial.println("\nWiFi connected");
 
-//   // Firebase init (no auth)
+//   // Firebase setup
 //   config.api_key = API_KEY;
 //   config.database_url = DATABASE_URL;
-
-//   // Skip user credentials (anonymous)
+//   auth.user.email = USER_EMAIL;
+//   auth.user.password = USER_PASSWORD;
+//   config.token_status_callback = tokenStatusCallback;
 //   Firebase.begin(&config, &auth);
 //   Firebase.reconnectWiFi(true);
 
-//   // MPU6050 init
-//   byte status = mpu.begin();
-//   Serial.print("MPU6050 status: ");
-//   Serial.println(status);
-//   if (status != 0) {
-//     Serial.println("MPU6050 failed. Check wiring.");
-//     while (1);
+//   // MPU6050 setup
+//   if (!mpu.begin()) {
+//     Serial.println("MPU6050 init failed!");
+//     while (1) delay(10);
 //   }
+//   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+//   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+//   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+//   Serial.println("MPU6050 ready");
 
-//   Serial.println("Calibrating sensor...");
-//   delay(1000);
-//   mpu.calcOffsets();  // Calibrate
-//   Serial.println("Calibration complete.");
+//   Serial.println("\nType 'start' to begin session.");
 // }
 
-// void loop() {
-//   mpu.update();
+// String classifyPosture(float pitch, float roll) {
+//   bool pitchGood = abs(pitch) <= GOOD_PITCH_MAX;
+//   bool pitchModerate = abs(pitch) <= MODERATE_PITCH_MAX;
+//   bool rollGood = abs(roll) <= GOOD_ROLL_MAX;
+//   bool rollModerate = abs(roll) <= MODERATE_ROLL_MAX;
 
-//   if (millis() - timer > 2000) {
-//     float pitch = mpu.getAngleX();
-//     float roll = mpu.getAngleY();
-
-//     Serial.print("Pitch: ");
-//     Serial.print(pitch);
-//     Serial.print(" | Roll: ");
-//     Serial.println(roll);
-
-//     // Send data to Firebase
-//     Firebase.RTDB.setFloat(&fbdo, "/posture/current/pitch", pitch);
-//     Firebase.RTDB.setFloat(&fbdo, "/posture/current/roll", roll);
-
-//     timer = millis();
-//   }
+//   if (pitchGood && rollGood) return "good";
+//   else if (pitchModerate && rollModerate) return "moderate";
+//   else return "bad";
 // }
 
+// void startNewSession() {
+//   sessionStartTime = millis();
+//   sessionActive = true;
 
+//   // Use millis as session ID (or replace with NTP later)
+//   unsigned long id = millis();
+//   currentSessionPath = "/posture/sessions/session_" + String(id);
 
-// #include <Wire.h>
-// #include <MPU6050_light.h>
-// #include <ESP8266WiFi.h>
-// #include <Firebase_ESP_Client.h>
-// #include <ESP8266Ping.h>
-// #include <addons/TokenHelper.h>
-// #include <addons/RTDBHelper.h>
-
-// // WiFi credentials
-// const char* ssid = "";
-// const char* password = "";
-
-// // Firebase project credentials
-// #define API_KEY ""
-// #define DATABASE_URL ""
-// #define USER_EMAIL "" // Replace with your Firebase registered email
-// #define USER_PASSWORD ""       // Replace with your Firebase registered password
-
-// // Firebase objects
-// FirebaseData fbdo;
-// FirebaseConfig config;
-// FirebaseAuth auth;
-
-// MPU6050 mpu(Wire);
-// unsigned long timer = 0;
-// unsigned long sendDataPrevMillis = 0;
-
-// bool initializeMPU6050() {
-//   byte status = mpu.begin();
-//   Serial.print("MPU6050 status: ");
-//   Serial.println(status);
-//   if (status != 0) {
-//     Serial.println("MPU6050 failed. Retrying...");
-//     return false;
-//   }
-//   Serial.println("Calibrating sensor...");
-//   delay(1000);
-//   mpu.calcOffsets();
-//   Serial.println("Calibration complete.");
-//   return true;
+//   Serial.println("\n=== SESSION STARTED ===");
+//   Serial.println("Logging posture every 3s for 1 min.");
+//   Serial.println("Session Path: " + currentSessionPath);
 // }
 
-// void setup() {
-//   Serial.begin(115200);
-//   delay(100); // Small delay to ensure Serial is ready
-//   Wire.begin();
+// void endSession() {
+//   sessionActive = false;
+//   Serial.println("\n=== SESSION ENDED ===");
+//   Serial.println("Type your posture experience feedback:");
 
-//   // WiFi connect
-//   WiFi.begin(ssid, password);
-//   Serial.print("Connecting to WiFi");
-//   unsigned long ms = millis();
-//   while (WiFi.status() != WL_CONNECTED) {
-//     Serial.print(".");
-//     delay(300);
-//     if (millis() - ms > 10000) {
-//       Serial.println("\nWiFi connection timeout.");
-//       break;
-//     }
-//   }
-//   if (WiFi.status() == WL_CONNECTED) {
-//     Serial.println("\nWiFi connected.");
-//     Serial.print("IP Address: ");
-//     Serial.println(WiFi.localIP());
+//   while (!Serial.available()) delay(100);
+//   userFeedback = Serial.readStringUntil('\n');
+//   userFeedback.trim();
+
+//   // Save feedback to Firebase
+//   if (Firebase.RTDB.setString(&fbdo, currentSessionPath + "/feedback", userFeedback)) {
+//     Serial.println("✅ Feedback saved!");
 //   } else {
-//     Serial.println("\nFailed to connect to WiFi.");
+//     Serial.println("❌ Feedback error: " + fbdo.errorReason());
 //   }
 
-//   // Test network reachability
-//   Serial.println("Pinging Google DNS (8.8.8.8)...");
-//   if (Ping.ping("8.8.8.8", 3)) {
-//     Serial.println("Ping successful. Network is reachable.");
+//   Serial.println("Type 'start' to begin another session.");
+// }
+
+// void logPostureData() {
+//   sensors_event_t a, g, temp;
+//   mpu.getEvent(&a, &g, &temp);
+
+//   float pitch = atan2(a.acceleration.y, sqrt(pow(a.acceleration.x, 2) + pow(a.acceleration.z, 2))) * 180.0 / PI;
+//   float roll = atan2(-a.acceleration.x, a.acceleration.z) * 180.0 / PI;
+
+//   String status = classifyPosture(pitch, roll);
+
+//   FirebaseJson json;
+//   json.set("pitch", pitch);
+//   json.set("roll", roll);
+//   json.set("status", status);
+//   json.set("timestamp/.sv", "timestamp"); // Let Firebase insert real time
+
+//   String path = currentSessionPath + "/readings";
+//   if (Firebase.RTDB.pushJSON(&fbdo, path, &json)) {
+//     Serial.print("Logged: ");
+//     Serial.print(pitch, 1); Serial.print("°, ");
+//     Serial.print(roll, 1); Serial.print("° => ");
+//     Serial.println(status);
 //   } else {
-//     Serial.println("Ping failed. Network may be unreachable.");
-//   }
-
-//   // Check free heap memory
-//   Serial.print("Free Heap: ");
-//   Serial.print(ESP.getFreeHeap());
-//   Serial.println(" bytes");
-
-//   // Firebase init
-//   Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
-
-//   // Assign the API key (required)
-//   config.api_key = API_KEY;
-
-//   // Assign the user sign-in credentials
-//   auth.user.email = USER_EMAIL;
-//   auth.user.password = USER_PASSWORD;
-
-//   // Assign the RTDB URL (required)
-//   config.database_url = DATABASE_URL;
-
-//   // Set the callback for token generation
-//   config.token_status_callback = tokenStatusCallback; // From TokenHelper.h
-
-//   // Set buffer sizes to prevent SSL connection issues
-//   fbdo.setBSSLBufferSize(4096 /* Rx buffer size */, 1024 /* Tx buffer size */);
-//   fbdo.setResponseSize(2048);
-
-//   // Set timeout options
-//   config.timeout.serverResponse = 10 * 1000;      // 10 seconds
-//   config.timeout.networkReconnect = 10 * 1000;    // 10 seconds
-//   config.timeout.socketConnection = 10 * 1000;    // 10 seconds
-
-//   // Enable WiFi reconnection
-//   Firebase.reconnectNetwork(true);
-
-//   // Initialize Firebase
-//   Serial.println("Initializing Firebase...");
-//   Firebase.begin(&config, &auth);
-
-//   // Wait for token generation (up to 10 seconds)
-//   ms = millis();
-//   while (!Firebase.ready() && (millis() - ms < 10000)) {
-//     Serial.print(".");
-//     delay(500);
-//   }
-//   if (Firebase.ready()) {
-//     Serial.println("\nFirebase is ready.");
-//   } else {
-//     Serial.println("\nFirebase not ready after initialization. Check credentials, network, or Firebase rules.");
-//   }
-
-//   // MPU6050 init with retry
-//   int retries = 3;
-//   bool mpuInitialized = false;
-//   for (int i = 0; i < retries; i++) {
-//     if (initializeMPU6050()) {
-//       mpuInitialized = true;
-//       break;
-//     }
-//     delay(1000);
-//   }
-//   if (!mpuInitialized) {
-//     Serial.println("Failed to initialize MPU6050 after retries. Check wiring.");
+//     Serial.println("Log failed: " + fbdo.errorReason());
 //   }
 // }
 
 // void loop() {
-//   mpu.update();
-
-//   if (millis() - sendDataPrevMillis > 15000 || sendDataPrevMillis == 0) {
-//     sendDataPrevMillis = millis();
-
-//     float pitch = mpu.getAngleX();
-//     float roll = mpu.getAngleY();
-
-//     Serial.print("Pitch: ");
-//     Serial.print(pitch);
-//     Serial.print(" | Roll: ");
-//     Serial.println(roll);
-
-//     // Classify posture
-//     String posture;
-//     if (pitch >= -10 && pitch <= 10 && roll >= -10 && roll <= 10) {
-//       posture = "good";
-//     } else if ((pitch >= -20 && pitch <= -10) || (pitch >= 10 && pitch <= 20) ||
-//                (roll >= -20 && roll <= -10) || (roll >= 10 && roll <= 20)) {
-//       posture = "moderate";
-//     } else {
-//       posture = "bad";
-//     }
-
-//     Serial.print("Posture: ");
-//     Serial.println(posture);
-
-//     // Check WiFi status before Firebase operations
-//     if (WiFi.status() != WL_CONNECTED) {
-//       Serial.println("WiFi disconnected. Attempting to reconnect...");
-//       WiFi.reconnect();
-//       unsigned long startTime = millis();
-//       while (WiFi.status() != WL_CONNECTED && millis() - startTime < 5000) {
-//         delay(500);
-//         Serial.print(".");
-//       }
-//       if (WiFi.status() == WL_CONNECTED) {
-//         Serial.println("\nWiFi reconnected.");
-//       } else {
-//         Serial.println("\nWiFi reconnection failed.");
-//       }
-//     }
-
-//     // Check free heap memory
-//     Serial.print("Free Heap: ");
-//     Serial.print(ESP.getFreeHeap());
-//     Serial.println(" bytes");
-
-//     // Send data to Firebase
-//     if (Firebase.ready()) {
-//       Serial.printf("Set pitch... %s\n", Firebase.RTDB.setFloat(&fbdo, "/posture/current/pitch", pitch) ? "ok" : fbdo.errorReason().c_str());
-//       Serial.printf("Set roll... %s\n", Firebase.RTDB.setFloat(&fbdo, "/posture/current/roll", roll) ? "ok" : fbdo.errorReason().c_str());
-//       Serial.printf("Set posture... %s\n", Firebase.RTDB.setString(&fbdo, "/posture/current/status", posture) ? "ok" : fbdo.errorReason().c_str());
-//     } else {
-//       Serial.println("Firebase not ready. Check credentials, network, or Firebase rules.");
-//       // Test network reachability again
-//       if (Ping.ping("8.8.8.8", 1)) {
-//         Serial.println("Ping successful. Network is reachable.");
-//       } else {
-//         Serial.println("Ping failed. Network may be unreachable.");
-//       }
+//   // Handle "start" command
+//   if (Serial.available()) {
+//     String command = Serial.readStringUntil('\n');
+//     command.trim();
+//     if (command.equalsIgnoreCase("start") && !sessionActive) {
+//       startNewSession();
 //     }
 //   }
-// }
 
+//   // Active session
+//   if (sessionActive) {
+//     unsigned long now = millis();
 
+//     if (now - lastLogTime >= LOG_INTERVAL) {
+//       lastLogTime = now;
+//       logPostureData();
+//     }
 
-
-// #include <Wire.h>
-// #include <MPU6050_light.h>
-// #include <ESP8266WiFi.h>
-// #include <Firebase_ESP_Client.h>
-// #include <addons/RTDBHelper.h>
-// #include <addons/TokenHelper.h>
-
-// // WiFi credentials
-// const char* ssid = "";
-// const char* password = "";
-
-// // Firebase project credentials
-// #define API_KEY ""
-// #define DATABASE_URL ""
-// #define USER_EMAIL ""
-// #define USER_PASSWORD ""
-
-// // Firebase objects
-// FirebaseData fbdo;
-// FirebaseConfig config;
-// FirebaseAuth auth;
-
-// MPU6050 mpu(Wire);
-// unsigned long sendDataPrevMillis = 0;
-
-// bool initializeMPU6050() {
-//   byte status = mpu.begin();
-//   if (status != 0) {
-//     Serial.println("MPU6050 failed.");
-//     return false;
+//     if (now - sessionStartTime >= SESSION_DURATION) {
+//       endSession();
+//     }
 //   }
-//   Serial.println("Calibrating MPU6050...");
-//   delay(1000);
-//   mpu.calcOffsets();
-//   Serial.println("Calibration complete.");
-//   return true;
-// }
 
-// void setup() {
-//   Serial.begin(115200);
+//   if (Firebase.isTokenExpired()) {
+//     Firebase.refreshToken(&config);
+//   }
+
 //   delay(100);
-//   Wire.begin();
+// }
 
-//   // WiFi connect
+
+
+// #include <Arduino.h>
+// #include <Adafruit_MPU6050.h>
+// #include <Adafruit_Sensor.h>
+// #include <Wire.h>
+// #include <ESP8266WiFi.h>
+// #include <Firebase_ESP_Client.h>
+// #include <addons/RTDBHelper.h>
+// #include <addons/TokenHelper.h>
+
+// // WiFi credentials
+// const char* ssid = "vivo Y27";
+// const char* password = "mkmkmkmk";
+
+// // Firebase config
+// #define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
+// #define DATABASE_URL "https://first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app/"
+// #define USER_EMAIL "pieceone2u@gmail.com"
+// #define USER_PASSWORD "12345@2310"
+
+// // Posture classification thresholds
+// const float GOOD_PITCH_MAX = 10.0;
+// const float MODERATE_PITCH_MAX = 20.0;
+// const float GOOD_ROLL_MAX = 5.0;
+// const float MODERATE_ROLL_MAX = 10.0;
+
+// // Firebase and MPU objects
+// FirebaseData fbdo;
+// FirebaseAuth auth;
+// FirebaseConfig config;
+// Adafruit_MPU6050 mpu;
+
+// // Session control
+// bool sessionActive = false;
+// unsigned long sessionStartTime = 0;
+// unsigned long lastLogTime = 0;
+// unsigned long SESSION_DURATION = 30UL * 60UL * 1000UL; // Default 30 minutes
+// const unsigned long LOG_INTERVAL = 3UL * 1000UL; // 3 sec
+// String currentSessionPath = "";
+// String userFeedback = "";
+// String userName = "";
+// int userAge = 0;
+
+// void setup() {
+//   Serial.begin(115200);
+//   delay(1000);
+
+//   // Connect to WiFi
 //   WiFi.begin(ssid, password);
 //   Serial.print("Connecting to WiFi");
-//   while (WiFi.status() != WL_CONNECTED && millis() < 10000) {
-//     Serial.print(".");
-//     delay(300);
+//   while (WiFi.status() != WL_CONNECTED) {
+//     delay(500); Serial.print(".");
 //   }
-//   Serial.println(WiFi.status() == WL_CONNECTED ? "\nWiFi connected." : "\nWiFi connection failed.");
+//   Serial.println("\nWiFi connected");
 
-//   // Firebase init
+//   // Firebase setup
 //   config.api_key = API_KEY;
+//   config.database_url = DATABASE_URL;
 //   auth.user.email = USER_EMAIL;
 //   auth.user.password = USER_PASSWORD;
-//   config.database_url = DATABASE_URL;
 //   config.token_status_callback = tokenStatusCallback;
-//   fbdo.setBSSLBufferSize(2048, 512);
-//   fbdo.setResponseSize(1024);
-//   config.timeout.serverResponse = 10 * 1000;
-//   Firebase.reconnectNetwork(true);
-
-//   Serial.println("Initializing Firebase...");
 //   Firebase.begin(&config, &auth);
+//   Firebase.reconnectWiFi(true);
 
-//   while (!Firebase.ready() && millis() < 5000) {
-//     delay(500);
+//   // MPU6050 setup
+//   if (!mpu.begin()) {
+//     Serial.println("MPU6050 init failed!");
+//     while (1) delay(10);
 //   }
-//   Serial.println(Firebase.ready() ? "Firebase ready." : "Firebase not ready. Check credentials.");
+//   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+//   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+//   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+//   Serial.println("MPU6050 ready");
 
-//   // MPU6050 init with retry
-//   bool mpuInitialized = false;
-//   for (int i = 0; i < 3; i++) {
-//     if (initializeMPU6050()) {
-//       mpuInitialized = true;
-//       break;
-//     }
-//     delay(500);
+//   Serial.println("\nType 'start' to begin session.");
+// }
+
+// String classifyPosture(float pitch, float roll) {
+//   bool pitchGood = abs(pitch) <= GOOD_PITCH_MAX;
+//   bool pitchModerate = abs(pitch) <= MODERATE_PITCH_MAX;
+//   bool rollGood = abs(roll) <= GOOD_ROLL_MAX;
+//   bool rollModerate = abs(roll) <= MODERATE_ROLL_MAX;
+
+//   if (pitchGood && rollGood) return "good";
+//   else if (pitchModerate && rollModerate) return "moderate";
+//   else return "bad";
+// }
+
+// void getUserInfo() {
+//   Serial.println("\nPlease enter your name:");
+//   while (!Serial.available()) delay(100);
+//   userName = Serial.readStringUntil('\n');
+//   userName.trim();
+
+//   Serial.println("Please enter your age:");
+//   while (!Serial.available()) delay(100);
+//   String ageStr = Serial.readStringUntil('\n');
+//   userAge = ageStr.toInt();
+
+//   Serial.println("\nSelect session duration:");
+//   Serial.println("1 - 30 minutes");
+//   Serial.println("2 - 2 hours");
+//   Serial.println("3 - 4 hours");
+//   Serial.println("Enter choice (1-3):");
+  
+//   while (!Serial.available()) delay(100);
+//   String choice = Serial.readStringUntil('\n');
+//   choice.trim();
+
+//   if (choice == "1") {
+//     SESSION_DURATION = 30UL * 60UL * 1000UL;
+//     Serial.println("30 minutes session selected");
+//   } else if (choice == "2") {
+//     SESSION_DURATION = 2UL * 60UL * 60UL * 1000UL;
+//     Serial.println("2 hours session selected");
+//   } else if (choice == "3") {
+//     SESSION_DURATION = 4UL * 60UL * 60UL * 1000UL;
+//     Serial.println("4 hours session selected");
+//   } else {
+//     Serial.println("Invalid choice, defaulting to 30 minutes");
+//     SESSION_DURATION = 30UL * 60UL * 1000UL;
 //   }
-//   if (!mpuInitialized) {
-//     Serial.println("MPU6050 initialization failed.");
+// }
+
+// void startNewSession() {
+//   getUserInfo();
+  
+//   sessionStartTime = millis();
+//   sessionActive = true;
+
+//   // Use millis as session ID (or replace with NTP later)
+//   unsigned long id = millis();
+//   currentSessionPath = "/posture/sessions/session_" + String(id);
+
+//   // Save user info to Firebase
+//   Firebase.RTDB.setString(&fbdo, currentSessionPath + "/user/name", userName);
+//   Firebase.RTDB.setInt(&fbdo, currentSessionPath + "/user/age", userAge);
+//   Firebase.RTDB.setInt(&fbdo, currentSessionPath + "/duration_minutes", SESSION_DURATION / 60000);
+
+//   Serial.println("\n=== SESSION STARTED ===");
+//   Serial.print("User: "); Serial.print(userName);
+//   Serial.print(", Age: "); Serial.println(userAge);
+//   Serial.print("Duration: "); Serial.print(SESSION_DURATION / 60000); Serial.println(" minutes");
+//   Serial.println("Logging posture every 3s");
+//   Serial.println("Session Path: " + currentSessionPath);
+// }
+
+// void endSession() {
+//   sessionActive = false;
+//   Serial.println("\n=== SESSION ENDED ===");
+//   Serial.println("Type your posture experience feedback:");
+
+//   while (!Serial.available()) delay(100);
+//   userFeedback = Serial.readStringUntil('\n');
+//   userFeedback.trim();
+
+//   // Save feedback to Firebase
+//   if (Firebase.RTDB.setString(&fbdo, currentSessionPath + "/feedback", userFeedback)) {
+//     Serial.println("✅ Feedback saved!");
+//   } else {
+//     Serial.println("❌ Feedback error: " + fbdo.errorReason());
+//   }
+
+//   Serial.println("Type 'start' to begin another session.");
+// }
+
+// void logPostureData() {
+//   sensors_event_t a, g, temp;
+//   mpu.getEvent(&a, &g, &temp);
+
+//   float pitch = atan2(a.acceleration.y, sqrt(pow(a.acceleration.x, 2) + pow(a.acceleration.z, 2))) * 180.0 / PI;
+//   float roll = atan2(-a.acceleration.x, a.acceleration.z) * 180.0 / PI;
+
+//   String status = classifyPosture(pitch, roll);
+
+//   FirebaseJson json;
+//   json.set("pitch", pitch);
+//   json.set("roll", roll);
+//   json.set("status", status);
+//   json.set("timestamp/.sv", "timestamp"); // Let Firebase insert real time
+
+//   String path = currentSessionPath + "/readings";
+//   if (Firebase.RTDB.pushJSON(&fbdo, path, &json)) {
+//     Serial.print("Logged: ");
+//     Serial.print(pitch, 1); Serial.print("°, ");
+//     Serial.print(roll, 1); Serial.print("° => ");
+//     Serial.println(status);
+//   } else {
+//     Serial.println("Log failed: " + fbdo.errorReason());
 //   }
 // }
 
 // void loop() {
-//   mpu.update();
-
-//   if (millis() - sendDataPrevMillis > 5000 || sendDataPrevMillis == 0) {
-//     sendDataPrevMillis = millis();
-
-//     float pitch = mpu.getAngleX();
-//     float roll = mpu.getAngleY();
-
-//     Serial.print("Pitch: ");
-//     Serial.print(pitch);
-//     Serial.print(" | Roll: ");
-//     Serial.println(roll);
-
-//     // Classify posture
-//     String posture;
-//     if (pitch >= -10 && pitch <= 10 && roll >= -10 && roll <= 10) {
-//       posture = "good";
-//     } else if ((pitch >= -20 && pitch <= -10) || (pitch >= 10 && pitch <= 20) ||
-//                (roll >= -20 && roll <= -10) || (roll >= 10 && roll <= 20)) {
-//       posture = "moderate";
-//     } else {
-//       posture = "bad";
-//     }
-
-//     Serial.print("Posture: ");
-//     Serial.println(posture);
-
-//     // Send data to Firebase
-//     if (Firebase.ready()) {
-//       // Update real-time values
-//       Firebase.RTDB.setFloat(&fbdo, "/posture/current/pitch", pitch);
-//       Firebase.RTDB.setFloat(&fbdo, "/posture/current/roll", roll);
-//       Firebase.RTDB.setString(&fbdo, "/posture/current/status", posture);
-
-//       // Store historical data
-//       FirebaseJson json;
-//       json.set("pitch", pitch);
-//       json.set("roll", roll);
-//       json.set("status", posture);
-//       json.set("timestamp/.sv", "timestamp"); // Firebase server timestamp
-//       Firebase.RTDB.pushJSON(&fbdo, "/posture/history", &json);
-//     } else {
-//       Serial.println("Firebase not ready.");
+//   // Handle "start" command
+//   if (Serial.available()) {
+//     String command = Serial.readStringUntil('\n');
+//     command.trim();
+//     if (command.equalsIgnoreCase("start") && !sessionActive) {
+//       startNewSession();
 //     }
 //   }
+
+//   // Active session
+//   if (sessionActive) {
+//     unsigned long now = millis();
+
+//     if (now - lastLogTime >= LOG_INTERVAL) {
+//       lastLogTime = now;
+//       logPostureData();
+//     }
+
+//     if (now - sessionStartTime >= SESSION_DURATION) {
+//       endSession();
+//     }
+//   }
+
+//   if (Firebase.isTokenExpired()) {
+//     Firebase.refreshToken(&config);
+//   }
+
+//   delay(100);
 // }
 
 
-
-// Perfect code ok
+#include <Arduino.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 #include <Wire.h>
-#include <MPU6050_light.h>
 #include <ESP8266WiFi.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/RTDBHelper.h>
 #include <addons/TokenHelper.h>
 
 // WiFi credentials
-const char* ssid = "";
-const char* password = "";
+const char* ssid = "vivo Y27";
+const char* password = "mkmkmkmk";
 
-// Firebase project credentials
-#define API_KEY ""
-#define DATABASE_URL ""
-#define USER_EMAIL ""
-#define USER_PASSWORD ""
+// Firebase config
+#define API_KEY "AIzaSyCDBLZZBNcmSIWmDCxgi0flVkVLPulfAoQ"
+#define DATABASE_URL "https://first-trail-f286d-default-rtdb.asia-southeast1.firebasedatabase.app/"
+#define USER_EMAIL "pieceone2u@gmail.com"
+#define USER_PASSWORD "12345@2310"
 
-// Firebase objects
+// Posture classification thresholds
+const float GOOD_PITCH_MAX = 10.0;
+const float MODERATE_PITCH_MAX = 20.0;
+const float GOOD_ROLL_MAX = 5.0;
+const float MODERATE_ROLL_MAX = 10.0;
+
+// Firebase and MPU objects
 FirebaseData fbdo;
-FirebaseConfig config;
 FirebaseAuth auth;
+FirebaseConfig config;
+Adafruit_MPU6050 mpu;
 
-MPU6050 mpu(Wire);
-unsigned long sendDataPrevMillis = 0;
+// Session control
+bool sessionActive = false;
+unsigned long sessionStartTime = 0;
+unsigned long lastLogTime = 0;
+unsigned long SESSION_DURATION = 30UL * 60UL * 1000UL; // Default 30 minutes
+const unsigned long LOG_INTERVAL = 3UL * 1000UL; // 3 sec
+String currentSessionPath = "";
+String userFeedback = "";
+String userName = "";
+int userAge = 0;
 
-bool initializeMPU6050() {
-  byte status = mpu.begin();
-  if (status != 0) {
-    Serial.println("MPU6050 failed.");
-    return false;
-  }
-  Serial.println("Calibrating MPU6050...");
-  delay(1000);
-  mpu.calcOffsets();
-  Serial.println("Calibration complete.");
-  return true;
-}
+// Feedback variables
+String discomfortLevel = "";
+String painArea = "";
+String actualDuration = "";
+String notes = "";
 
 void setup() {
   Serial.begin(115200);
-  delay(100);
-  Wire.begin();
+  delay(1000);
 
-  // WiFi connect
+  // Connect to WiFi
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED && millis() < 10000) {
-    Serial.print(".");
-    delay(300);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500); Serial.print(".");
   }
-  Serial.println(WiFi.status() == WL_CONNECTED ? "\nWiFi connected." : "\nWiFi connection failed.");
+  Serial.println("\nWiFi connected");
 
-  // Firebase init
+  // Firebase setup
   config.api_key = API_KEY;
+  config.database_url = DATABASE_URL;
   auth.user.email = USER_EMAIL;
   auth.user.password = USER_PASSWORD;
-  config.database_url = DATABASE_URL;
   config.token_status_callback = tokenStatusCallback;
-  fbdo.setBSSLBufferSize(2048, 512);
-  fbdo.setResponseSize(1024);
-  config.timeout.serverResponse = 10 * 1000;
-  Firebase.reconnectNetwork(true);
-
-  Serial.println("Initializing Firebase...");
   Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
 
-  while (!Firebase.ready() && millis() < 5000) {
-    delay(500);
+  // MPU6050 setup
+  if (!mpu.begin()) {
+    Serial.println("MPU6050 init failed!");
+    while (1) delay(10);
   }
-  Serial.println(Firebase.ready() ? "Firebase ready." : "Firebase not ready. Check credentials.");
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  Serial.println("MPU6050 ready");
 
-  // MPU6050 init with retry
-  bool mpuInitialized = false;
-  for (int i = 0; i < 3; i++) {
-    if (initializeMPU6050()) {
-      mpuInitialized = true;
-      break;
-    }
-    delay(500);
+  Serial.println("\nType 'start' to begin session.");
+}
+
+String classifyPosture(float pitch, float roll) {
+  bool pitchGood = abs(pitch) <= GOOD_PITCH_MAX;
+  bool pitchModerate = abs(pitch) <= MODERATE_PITCH_MAX;
+  bool rollGood = abs(roll) <= GOOD_ROLL_MAX;
+  bool rollModerate = abs(roll) <= MODERATE_ROLL_MAX;
+
+  if (pitchGood && rollGood) return "good";
+  else if (pitchModerate && rollModerate) return "moderate";
+  else return "bad";
+}
+
+void getUserInfo() {
+  Serial.println("\nPlease enter your name:");
+  while (!Serial.available()) delay(100);
+  userName = Serial.readStringUntil('\n');
+  userName.trim();
+
+  Serial.println("Please enter your age:");
+  while (!Serial.available()) delay(100);
+  String ageStr = Serial.readStringUntil('\n');
+  userAge = ageStr.toInt();
+
+  Serial.println("\nSelect session duration:");
+  Serial.println("1 - 30 minutes");
+  Serial.println("2 - 2 hours");
+  Serial.println("3 - 4 hours");
+  Serial.println("Enter choice (1-3):");
+  
+  while (!Serial.available()) delay(100);
+  String choice = Serial.readStringUntil('\n');
+  choice.trim();
+
+  if (choice == "1") {
+    SESSION_DURATION = 30UL * 10UL * 1000UL;
+    Serial.println("30 minutes session selected");
+  } else if (choice == "2") {
+    SESSION_DURATION = 2UL * 60UL * 60UL * 1000UL;
+    Serial.println("2 hours session selected");
+  } else if (choice == "3") {
+    SESSION_DURATION = 4UL * 60UL * 60UL * 1000UL;
+    Serial.println("4 hours session selected");
+  } else {
+    Serial.println("Invalid choice, defaulting to 30 minutes");
+    SESSION_DURATION = 30UL * 60UL * 1000UL;
   }
-  if (!mpuInitialized) {
-    Serial.println("MPU6050 initialization failed.");
+}
+
+void collectFeedback() {
+  Serial.println("\n=== POSTURE EXPERIENCE FEEDBACK ===");
+  
+  // Discomfort Level
+  Serial.println("Rate your discomfort level:");
+  Serial.println("1 - None");
+  Serial.println("2 - Mild");
+  Serial.println("3 - Moderate");
+  Serial.println("4 - Severe");
+  Serial.println("Enter choice (1-4):");
+  while (!Serial.available()) delay(100);
+  String discomfortChoice = Serial.readStringUntil('\n');
+  discomfortChoice.trim();
+  
+  if (discomfortChoice == "1") discomfortLevel = "none";
+  else if (discomfortChoice == "2") discomfortLevel = "mild";
+  else if (discomfortChoice == "3") discomfortLevel = "moderate";
+  else if (discomfortChoice == "4") discomfortLevel = "severe";
+  else discomfortLevel = "unknown";
+
+  // Pain Area
+  Serial.println("\nWhere did you feel discomfort?");
+  Serial.println("1 - Lower back");
+  Serial.println("2 - Neck");
+  Serial.println("3 - Shoulders");
+  Serial.println("4 - None");
+  Serial.println("Enter choice (1-4):");
+  while (!Serial.available()) delay(100);
+  String painChoice = Serial.readStringUntil('\n');
+  painChoice.trim();
+  
+  if (painChoice == "1") painArea = "lower back";
+  else if (painChoice == "2") painArea = "neck";
+  else if (painChoice == "3") painArea = "shoulders";
+  else if (painChoice == "4") painArea = "none";
+  else painArea = "unknown";
+
+  // Actual Duration
+  Serial.println("\nHow long did you actually sit? (in minutes)");
+  Serial.println("Enter number (e.g., 30, 45, 60):");
+  while (!Serial.available()) delay(100);
+  actualDuration = Serial.readStringUntil('\n');
+  actualDuration.trim();
+
+  // Notes
+  Serial.println("\nAny additional notes? (optional)");
+  Serial.println("Examples: 'Felt good', 'Back pain at 20 min'");
+  while (!Serial.available()) delay(100);
+  notes = Serial.readStringUntil('\n');
+  notes.trim();
+}
+
+void startNewSession() {
+  getUserInfo();
+  
+  sessionStartTime = millis();
+  sessionActive = true;
+
+  // Use millis as session ID (or replace with NTP later)
+  unsigned long id = millis();
+  currentSessionPath = "/posture/sessions/session_" + String(id);
+
+  // Save user info to Firebase
+  Firebase.RTDB.setString(&fbdo, currentSessionPath + "/user/name", userName);
+  Firebase.RTDB.setInt(&fbdo, currentSessionPath + "/user/age", userAge);
+  Firebase.RTDB.setInt(&fbdo, currentSessionPath + "/duration_minutes", SESSION_DURATION / 60000);
+
+  Serial.println("\n=== SESSION STARTED ===");
+  Serial.print("User: "); Serial.print(userName);
+  Serial.print(", Age: "); Serial.println(userAge);
+  Serial.print("Duration: "); Serial.print(SESSION_DURATION / 60000); Serial.println(" minutes");
+  Serial.println("Logging posture every 3s");
+  Serial.println("Session Path: " + currentSessionPath);
+}
+
+void endSession() {
+  sessionActive = false;
+  
+  // Collect detailed feedback
+  collectFeedback();
+
+  // Save all feedback to Firebase
+  FirebaseJson feedbackJson;
+  feedbackJson.set("discomfort_level", discomfortLevel);
+  feedbackJson.set("pain_area", painArea);
+  feedbackJson.set("actual_duration_minutes", actualDuration);
+  feedbackJson.set("notes", notes);
+
+  if (Firebase.RTDB.setJSON(&fbdo, currentSessionPath + "/feedback", &feedbackJson)) {
+    Serial.println("\n✅ Feedback saved!");
+    Serial.println("Discomfort Level: " + discomfortLevel);
+    Serial.println("Pain Area: " + painArea);
+    Serial.println("Actual Duration: " + actualDuration + " minutes");
+    Serial.println("Notes: " + notes);
+  } else {
+    Serial.println("❌ Feedback error: " + fbdo.errorReason());
+  }
+
+  Serial.println("\nType 'start' to begin another session.");
+}
+
+void logPostureData() {
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  float pitch = atan2(a.acceleration.y, sqrt(pow(a.acceleration.x, 2) + pow(a.acceleration.z, 2))) * 180.0 / PI;
+  float roll = atan2(-a.acceleration.x, a.acceleration.z) * 180.0 / PI;
+
+  String status = classifyPosture(pitch, roll);
+
+  FirebaseJson json;
+  json.set("pitch", pitch);
+  json.set("roll", roll);
+  json.set("status", status);
+  json.set("timestamp/.sv", "timestamp"); // Let Firebase insert real time
+
+  String path = currentSessionPath + "/readings";
+  if (Firebase.RTDB.pushJSON(&fbdo, path, &json)) {
+    Serial.print("Logged: ");
+    Serial.print(pitch, 1); Serial.print("°, ");
+    Serial.print(roll, 1); Serial.print("° => ");
+    Serial.println(status);
+  } else {
+    Serial.println("Log failed: " + fbdo.errorReason());
   }
 }
 
 void loop() {
-  mpu.update();
-
-  if (millis() - sendDataPrevMillis > 1000 || sendDataPrevMillis == 0) {
-    sendDataPrevMillis = millis();
-
-    float pitch = mpu.getAngleX();
-    float roll = mpu.getAngleY();
-
-    Serial.print("Pitch: ");
-    Serial.print(pitch);
-    Serial.print(" | Roll: ");
-    Serial.println(roll);
-
-    // Classify posture
-    String posture;
-    if (pitch >= -10 && pitch <= 10 && roll >= -10 && roll <= 10) {
-      posture = "good";
-    } else if ((pitch >= -20 && pitch <= -10) || (pitch >= 10 && pitch <= 20) ||
-               (roll >= -20 && roll <= -10) || (roll >= 10 && roll <= 20)) {
-      posture = "moderate";
-    } else {
-      posture = "bad";
-    }
-
-    Serial.print("Posture: ");
-    Serial.println(posture);
-
-    // Send data to Firebase
-    if (Firebase.ready()) {
-      // Update real-time values
-      Firebase.RTDB.setFloat(&fbdo, "/posture/current/pitch", pitch);
-      Firebase.RTDB.setFloat(&fbdo, "/posture/current/roll", roll);
-      Firebase.RTDB.setString(&fbdo, "/posture/current/status", posture);
-
-      // Store historical data
-      FirebaseJson json;
-      json.set("pitch", pitch);
-      json.set("roll", roll);
-      json.set("status", posture);
-      json.set("timestamp/.sv", "timestamp"); // Firebase server timestamp
-      if (Firebase.RTDB.pushJSON(&fbdo, "/posture/history", &json)) {
-        Serial.println("Historical data stored.");
-      } else {
-        Serial.print("Failed to store historical data: ");
-        Serial.println(fbdo.errorReason());
-      }
-    } else {
-      Serial.println("Firebase not ready.");
+  // Handle "start" command
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    if (command.equalsIgnoreCase("start") && !sessionActive) {
+      startNewSession();
     }
   }
-}
 
+  // Active session
+  if (sessionActive) {
+    unsigned long now = millis();
+
+    if (now - lastLogTime >= LOG_INTERVAL) {
+      lastLogTime = now;
+      logPostureData();
+    }
+
+    if (now - sessionStartTime >= SESSION_DURATION) {
+      endSession();
+    }
+  }
+
+  if (Firebase.isTokenExpired()) {
+    Firebase.refreshToken(&config);
+  }
+
+  delay(100);
+}

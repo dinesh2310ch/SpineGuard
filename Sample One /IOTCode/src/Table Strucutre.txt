@@ -1,0 +1,24 @@
+posture/
+└── sessions/
+    └── session_[MILLIS_TIMESTAMP]/
+        ├── user/
+        │   ├── name: "John Doe"
+        │   └── age: 30
+        ├── duration_minutes: 30
+        ├── feedback/
+        │   ├── discomfort_level: "moderate"
+        │   ├── pain_area: "lower back"
+        │   ├── actual_duration_minutes: "30"
+        │   └── notes: "Felt some stiffness after 20 minutes"
+        └── readings/
+            ├── [PUSH_ID_1]/
+            │   ├── pitch: 12.5
+            │   ├── roll: 3.2
+            │   ├── status: "moderate"
+            │   └── timestamp: [SERVER_TIMESTAMP]
+            ├── [PUSH_ID_2]/
+            │   ├── pitch: 8.1
+            │   ├── roll: 2.7
+            │   ├── status: "good"
+            │   └── timestamp: [SERVER_TIMESTAMP]
+            └── ... (more readings every 3 seconds)
